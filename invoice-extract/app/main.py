@@ -7,6 +7,7 @@ import fitz
 import torch
 from transformers import AutoModelForCausalLM, AutoProcessor
 from transformers.dynamic_module_utils import get_cached_module_file
+
 from pathlib import Path
 
 import flash_attn_stub  # noqa: F401 - ensure flash_attn is stubbed for CPU-only use
