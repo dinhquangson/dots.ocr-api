@@ -6,6 +6,8 @@ from PIL import Image
 import fitz
 import torch
 from transformers import AutoModelForCausalLM, AutoProcessor
+from transformers.dynamic_module_utils import get_cached_module_file
+from pathlib import Path
 
 import flash_attn_stub  # noqa: F401 - ensure flash_attn is stubbed for CPU-only use
 
@@ -18,6 +20,25 @@ processor = None
 
 def load_model():
     global model, processor
+
+    # Work around a transformers quirk when the repo name contains dots.
+    # The "dots.ocr" repository is cached under a folder with the same name,
+    # while transformers tries to import it as "dots", causing a
+    # ``ModuleNotFoundError``.  We pre-download the module and create an
+    # alias without dots so the import machinery can locate it.
+    repo_name = MODEL_ID.split("/")[-1]
+    if "." in repo_name:
+        try:
+            # Download one of the modeling files to ensure the repo is cached
+            cached = Path(get_cached_module_file(MODEL_ID, "modeling_dots_ocr.py"))
+            src = cached.parents[2] / repo_name  # .../rednote-hilab/dots.ocr
+            dst = cached.parents[2] / repo_name.split(".")[0]
+            if src.exists() and not dst.exists():
+                dst.symlink_to(src, target_is_directory=True)
+        except Exception:
+            # If anything goes wrong we still attempt to load the model normally
+            pass
+
     model = AutoModelForCausalLM.from_pretrained(
         MODEL_ID, trust_remote_code=True, torch_dtype=torch.float32
     )
