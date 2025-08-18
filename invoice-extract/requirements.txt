@@ -4,5 +4,6 @@ transformers>=4.42
 accelerate
 pillow
 pymupdf
+python-multipart
 json5
 torch
