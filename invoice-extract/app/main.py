@@ -7,21 +7,19 @@ import fitz
 import torch
 from transformers import AutoModelForCausalLM, AutoProcessor
 
+import flash_attn_stub  # noqa: F401 - ensure flash_attn is stubbed for CPU-only use
+
 MODEL_ID = os.getenv("MODEL_ID", "rednote-hilab/dots.ocr")
-DTYPE = os.getenv("TORCH_DTYPE", "bfloat16")
 
 app = FastAPI()
 model = None
 processor = None
-device = "cpu"
+
 
 def load_model():
-    global model, processor, device
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    dtype = torch.bfloat16 if device == "cuda" and DTYPE.lower().startswith("bf") else torch.float32
+    global model, processor
     model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID, trust_remote_code=True,
-        torch_dtype=dtype, device_map="auto" if device=="cuda" else None
+        MODEL_ID, trust_remote_code=True, torch_dtype=torch.float32
     )
     processor = AutoProcessor.from_pretrained(MODEL_ID, trust_remote_code=True)
 
@@ -61,8 +59,6 @@ def infer(images: List[Image.Image]) -> dict:
     messages = [{"role":"user","content":content}]
     text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     inputs = processor(text=[text], images=images, padding=True, return_tensors="pt")
-    if device == "cuda":
-        inputs = {k: v.to("cuda") for k, v in inputs.items()}
     out = model.generate(**inputs, max_new_tokens=4096, temperature=0.01)
     resp = processor.batch_decode(out[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True)[0]
     m = re.search(r"\{.*\}", resp, flags=re.S)
