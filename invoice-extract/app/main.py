@@ -1,4 +1,5 @@
 import os, io, re, json
+from pathlib import Path
 from typing import List
 from fastapi import FastAPI, UploadFile, File
 from pydantic import BaseModel
@@ -7,22 +8,41 @@ import fitz
 import torch
 from transformers import AutoModelForCausalLM, AutoProcessor
 
+import flash_attn_stub  # noqa: F401 - ensure flash_attn is stubbed for CPU-only use
+
 MODEL_ID = os.getenv("MODEL_ID", "rednote-hilab/dots.ocr")
-DTYPE = os.getenv("TORCH_DTYPE", "bfloat16")
 
 app = FastAPI()
 model = None
 processor = None
-device = "cpu"
+
+
+def _fix_repo_symlink() -> None:
+    cache = Path(os.getenv("HF_MODULES_CACHE", Path.home() / ".cache/huggingface/modules"))
+    src = cache / "transformers_modules" / "rednote-hilab" / "dots.ocr"
+    dst = cache / "transformers_modules" / "rednote-hilab" / "dots" / "ocr"
+    if src.exists() and not dst.exists():
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.symlink_to(src, target_is_directory=True)
+
 
 def load_model():
-    global model, processor, device
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    dtype = torch.bfloat16 if device == "cuda" and DTYPE.lower().startswith("bf") else torch.float32
-    model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID, trust_remote_code=True,
-        torch_dtype=dtype, device_map="auto" if device=="cuda" else None
-    )
+    global model, processor
+
+    def _inner():
+        return AutoModelForCausalLM.from_pretrained(
+            MODEL_ID, trust_remote_code=True, torch_dtype=torch.float32
+        )
+
+    try:
+        model = _inner()
+    except ModuleNotFoundError as err:
+        if "rednote-hilab.dots" in str(err):
+            _fix_repo_symlink()
+            model = _inner()
+        else:
+            raise
+
     processor = AutoProcessor.from_pretrained(MODEL_ID, trust_remote_code=True)
 
 @app.on_event("startup")
@@ -61,8 +81,6 @@ def infer(images: List[Image.Image]) -> dict:
     messages = [{"role":"user","content":content}]
     text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     inputs = processor(text=[text], images=images, padding=True, return_tensors="pt")
-    if device == "cuda":
-        inputs = {k: v.to("cuda") for k, v in inputs.items()}
     out = model.generate(**inputs, max_new_tokens=4096, temperature=0.01)
     resp = processor.batch_decode(out[:, inputs["input_ids"].shape[1]:], skip_special_tokens=True)[0]
     m = re.search(r"\{.*\}", resp, flags=re.S)
