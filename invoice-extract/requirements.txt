@@ -1,7 +1,6 @@
 fastapi
 uvicorn[standard]
 transformers>=4.42
-accelerate
 pillow
 pymupdf
 python-multipart
