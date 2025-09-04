@@ -43,12 +43,12 @@ def load_model():
     model = AutoModelForCausalLM.from_pretrained(
         "rednote-hilab/dots.ocr",
         trust_remote_code=True,
-        token="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"
+        use_auth_token="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"
     )
     processor = AutoProcessor.from_pretrained(
         MODEL_ID, 
         trust_remote_code=True,
-        token="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"
+        use_auth_token="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"
     )
 
 @app.on_event("startup")
