@@ -41,7 +41,8 @@ def load_model():
             pass
 
     model = AutoModelForCausalLM.from_pretrained(
-        MODEL_ID, trust_remote_code=True, torch_dtype=torch.float32
+        "rednote-hilab/dots.ocr",
+        trust_remote_code=True
     )
     processor = AutoProcessor.from_pretrained(MODEL_ID, trust_remote_code=True)
 
