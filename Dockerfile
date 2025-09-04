@@ -5,7 +5,6 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
 COPY app /app
 ENV HF_HOME=/root/.cache/huggingface
-ENV HF_TOKEN=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
 ENV MODEL_ID=rednote-hilab/dots.ocr
 ENV TORCH_DTYPE=float32
 EXPOSE 8000
